@@ -71,7 +71,7 @@ def get_networking_matches(user_need: str, db_context: str, api_key: str) -> str
              o un mensaje de error si la petición falla.
     """
     try:
-        # Inicializamos el cliente con el SDK moderno 'google-genai'
+        # 1. Inicializamos el cliente con el nuevo SDK
         client = genai.Client(api_key=api_key)
         
         system_instruction = (
@@ -84,30 +84,37 @@ def get_networking_matches(user_need: str, db_context: str, api_key: str) -> str
             "3. Para cada match, incluye el nombre del perfil (o documento), el Nivel de Match con su porcentaje, y una "
             "justificación basada estrictamente en la evidencia de los PDFs."
         )
-        
+
         prompt = (
             f"Contenido de los documentos (Base de Conocimiento):\n{db_context}\n\n"
             f"Necesidad del usuario actual:\n'{user_need}'\n\n"
             "Por favor, devuelve los mejores matches clasificados por nivel de match y justificados."
         )
         
-        # Llamada a la API usando Gemini 2.0 Flash y su objeto Config para instrucciones de sistema
+        # 2. Generamos el contenido a través del cliente
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-1.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 temperature=0.7
             )
         )
-        
+
         return response.text
 
     except Exception as e:
         logging.error(f"Error al conectar con Gemini: {e}")
+        # 4. Mostramos un error detallado al usuario para facilitar el diagnóstico
         return (
-            "⚠️ **Hubo un problema al procesar tu solicitud.**\n"
-            "Por favor, verifica tu conexión o asegúrate de que tu API Key sea correcta y tenga saldo."
+            "⚠️ **Hubo un problema al procesar tu solicitud.**\n\n"
+            "**Detalles del error de la API:**\n"
+            f"```\n{e}\n```\n\n"
+            "**Posibles causas:**\n"
+            "*   Tu API Key es incorrecta o está deshabilitada.\n"
+            "*   El proyecto de Google Cloud asociado no tiene la facturación activada.\n"
+            "*   La API 'Generative Language' no está habilitada en tu proyecto de Google Cloud.\n"
+            "*   Hay un problema de red que impide la conexión con los servicios de Google."
         )
 
 # ==========================================
@@ -136,12 +143,16 @@ def main() -> None:
         
     api_key = st.secrets["GEMINI_API_KEY"]
 
+    # Obtenemos la ruta absoluta al directorio del script
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    kb_path = os.path.join(base_dir, "knowledge_base")
+
     # Cargar base de conocimiento de la carpeta de PDFs
     with st.spinner("📚 Verificando base de datos de conocimiento..."):
-        knowledge_context = load_knowledge_base("knowledge_base")
+        knowledge_context = load_knowledge_base(kb_path)
         if not knowledge_context:
-            st.warning("⚠️ No se encontraron documentos PDF en la carpeta `knowledge_base`.")
-            st.info("Por favor, crea la carpeta `knowledge_base/` en la raíz de tu proyecto y añade algunos PDFs para que el sistema funcione correctamente.")
+            st.warning(f"⚠️ No se encontraron documentos PDF (o no se pudieron extraer) en la carpeta:\n`{kb_path}`")
+            st.info("Por favor, asegúrate de añadir archivos con extensión '.pdf' en esa ruta exacta.")
 
     # Inicializamos el historial del chat en el estado de la sesión
     if "messages" not in st.session_state:

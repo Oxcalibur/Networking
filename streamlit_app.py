@@ -82,7 +82,9 @@ def get_networking_matches(user_need: str, db_context: str, api_key: str) -> str
             "1. NO INVENTES información, nombres, ni perfiles que no estén en los documentos provistos.\n"
             "2. Debes clasificar a los candidatos por NIVELES DE MATCH (ej. Match Alto, Match Medio, Match Bajo) e incluir un porcentaje estimado de afinidad (ej. 85%).\n"
             "3. Para cada match, incluye el nombre del perfil (o documento), el Nivel de Match con su porcentaje, y una "
-            "justificación basada estrictamente en la evidencia de los PDFs."
+            "justificación basada estrictamente en la evidencia de los PDFs.\n"
+            "4. Si la necesidad del usuario es ambigua o necesitas más detalles para dar una respuesta precisa, puedes hacer preguntas de seguimiento para clarificar antes de dar los matches finales.\n"
+            "5. Si el usuario menciona una categoría amplia (ej. 'tecnología', 'marketing'), intenta clarificar si busca un proveedor (comprar) o un cliente (vender). Al responder, asegúrate de incluir todos los perfiles relevantes para esa categoría."
         )
 
         prompt = (
@@ -93,7 +95,7 @@ def get_networking_matches(user_need: str, db_context: str, api_key: str) -> str
         
         # 2. Generamos el contenido a través del cliente
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,

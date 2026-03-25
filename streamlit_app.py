@@ -13,11 +13,13 @@ def check_password() -> bool:
     if st.session_state.get("password_correct", False):
         return True
 
-    st.subheader("🔒 Iniciar Sesión")
-    username = st.text_input("Usuario")
-    password = st.text_input("Contraseña", type="password")
-    
-    if st.button("Entrar"):
+    with st.form("login_form"):
+        st.subheader("🔒 Iniciar Sesión")
+        username = st.text_input("Usuario")
+        password = st.text_input("Contraseña", type="password")
+        submitted = st.form_submit_button("Entrar")
+        
+    if submitted:
         # Obtenemos credenciales de st.secrets (con fallback por defecto)
         valid_user = st.secrets.get("APP_USER", "admin")
         valid_pass = st.secrets.get("APP_PASS", "admin123")
@@ -84,7 +86,8 @@ def get_networking_matches(user_need: str, db_context: str, api_key: str) -> str
             "3. Para cada match, incluye el nombre del perfil (o documento), el Nivel de Match con su porcentaje, y una "
             "justificación basada estrictamente en la evidencia de los PDFs.\n"
             "4. Si la necesidad del usuario es ambigua o necesitas más detalles para dar una respuesta precisa, puedes hacer preguntas de seguimiento para clarificar antes de dar los matches finales.\n"
-            "5. Si el usuario menciona una categoría amplia (ej. 'tecnología', 'marketing'), intenta clarificar si busca un proveedor (comprar) o un cliente (vender). Al responder, asegúrate de incluir todos los perfiles relevantes para esa categoría."
+            "5. Si el usuario menciona una categoría amplia (ej. 'tecnología', 'marketing'), intenta clarificar si busca un proveedor (comprar) o un cliente (vender). Al responder, asegúrate de incluir todos los perfiles relevantes para esa categoría.\n"
+            "6. Diferencia claramente entre buscar un 'proveedor' y un 'cliente'. Si el usuario busca un **proveedor** (quiere comprar), solo perfiles que **ofrecen** ese servicio son un match alto. Perfiles que **buscan** ese mismo servicio son un match nulo o bajo para esta consulta. Si el usuario busca un **cliente** (quiere vender), la lógica es la inversa."
         )
 
         prompt = (

@@ -1,6 +1,170 @@
+import logging
+import os
 import streamlit as st
+from pypdf import PdfReader
+from google import genai
+from google.genai import types
 
-st.title("🎈 My new app")
-st.write(
-    "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
-)
+# ==========================================
+# 1. SISTEMA DE AUTENTICACIÓN
+# ==========================================
+def check_password() -> bool:
+    """Maneja el login de la aplicación."""
+    if st.session_state.get("password_correct", False):
+        return True
+
+    st.subheader("🔒 Iniciar Sesión")
+    username = st.text_input("Usuario")
+    password = st.text_input("Contraseña", type="password")
+    
+    if st.button("Entrar"):
+        # Obtenemos credenciales de st.secrets (con fallback por defecto)
+        valid_user = st.secrets.get("APP_USER", "admin")
+        valid_pass = st.secrets.get("APP_PASS", "admin123")
+        
+        if username == valid_user and password == valid_pass:
+            st.session_state["password_correct"] = True
+            st.rerun()
+        else:
+            st.error("Usuario o contraseña incorrectos")
+    return False
+
+# ==========================================
+# 2. LECTURA DE CONOCIMIENTO (PDFs)
+# ==========================================
+@st.cache_data(show_spinner=False)
+def load_knowledge_base(folder_path: str = "knowledge_base") -> str:
+    """Lee todos los archivos PDF en la carpeta dada y extrae su texto."""
+    if not os.path.exists(folder_path):
+        return ""
+    
+    combined_text = ""
+    for filename in os.listdir(folder_path):
+        if filename.lower().endswith(".pdf"):
+            filepath = os.path.join(folder_path, filename)
+            try:
+                reader = PdfReader(filepath)
+                text = f"\n--- PERFIL / DOCUMENTO: {filename} ---\n"
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+                combined_text += text
+            except Exception as e:
+                logging.error(f"Error leyendo {filename}: {e}")
+    return combined_text
+
+# ==========================================
+# 3. LÓGICA DE INTELIGENCIA ARTIFICIAL
+# ==========================================
+def get_networking_matches(user_need: str, db_context: str, api_key: str) -> str:
+    """
+    Envía la necesidad del usuario y la base de datos a Gemini para obtener los 3 mejores matches.
+    
+    Args:
+        user_need (str): La descripción de lo que busca o necesita el usuario.
+        db_context (str): El texto extraído de todos los PDFs de la base de conocimiento.
+        api_key (str): La clave de API de Google GenAI.
+        
+    Returns:
+        str: La respuesta generada por el modelo con los matches y sus justificaciones, 
+             o un mensaje de error si la petición falla.
+    """
+    try:
+        # Inicializamos el cliente con el SDK moderno 'google-genai'
+        client = genai.Client(api_key=api_key)
+        
+        system_instruction = (
+            "Actúa como un Experto en Networking Empresarial altamente capacitado. "
+            "Tu objetivo es analizar la necesidad de un usuario y hacer 'matchmaking' con "
+            "los perfiles extraídos de los documentos PDF proporcionados en tu contexto.\n"
+            "REGLAS ESTRICTAS:\n"
+            "1. NO INVENTES información, nombres, ni perfiles que no estén en los documentos provistos.\n"
+            "2. Debes clasificar a los candidatos por NIVELES DE MATCH (ej. Match Alto, Match Medio, Match Bajo) e incluir un porcentaje estimado de afinidad (ej. 85%).\n"
+            "3. Para cada match, incluye el nombre del perfil (o documento), el Nivel de Match con su porcentaje, y una "
+            "justificación basada estrictamente en la evidencia de los PDFs."
+        )
+        
+        prompt = (
+            f"Contenido de los documentos (Base de Conocimiento):\n{db_context}\n\n"
+            f"Necesidad del usuario actual:\n'{user_need}'\n\n"
+            "Por favor, devuelve los mejores matches clasificados por nivel de match y justificados."
+        )
+        
+        # Llamada a la API usando Gemini 2.0 Flash y su objeto Config para instrucciones de sistema
+        response = client.models.generate_content(
+            model='gemini-2.0-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0.7
+            )
+        )
+        
+        return response.text
+
+    except Exception as e:
+        logging.error(f"Error al conectar con Gemini: {e}")
+        return (
+            "⚠️ **Hubo un problema al procesar tu solicitud.**\n"
+            "Por favor, verifica tu conexión o asegúrate de que tu API Key sea correcta y tenga saldo."
+        )
+
+# ==========================================
+# 4. LÓGICA DE INTERFAZ DE USUARIO (UI)
+# ==========================================
+def main() -> None:
+    """Función principal que renderiza la interfaz en Streamlit y maneja los eventos."""
+    
+    st.set_page_config(page_title="AI Business Matchmaker", page_icon="🤝", layout="centered")
+    st.title("🤝 AI Business Networking Club")
+
+    # Verificación de Login
+    if not check_password():
+        return
+
+    st.write("¡Conecta con el talento o los clientes perfectos para impulsar tus proyectos!")
+    
+    # --- Configuración de API Key usando st.secrets ---
+    # Para configurar esto en Codespaces, crea un directorio `.streamlit` en la raíz de tu proyecto
+    # y dentro un archivo `secrets.toml` con la siguiente estructura:
+    # GEMINI_API_KEY = "tu_clave_aqui"
+    if "GEMINI_API_KEY" not in st.secrets:
+        st.error("Falta configurar `GEMINI_API_KEY` en `st.secrets`.")
+        st.info("Crea un archivo `.streamlit/secrets.toml` e incluye tu API Key.")
+        st.stop()
+        
+    api_key = st.secrets["GEMINI_API_KEY"]
+
+    # Cargar base de conocimiento de la carpeta de PDFs
+    with st.spinner("📚 Verificando base de datos de conocimiento..."):
+        knowledge_context = load_knowledge_base("knowledge_base")
+        if not knowledge_context:
+            st.warning("⚠️ No se encontraron documentos PDF en la carpeta `knowledge_base`.")
+            st.info("Por favor, crea la carpeta `knowledge_base/` en la raíz de tu proyecto y añade algunos PDFs para que el sistema funcione correctamente.")
+
+    # Inicializamos el historial del chat en el estado de la sesión
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Renderizamos el historial previo en la interfaz
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Campo de entrada (Chat input) de Streamlit
+    if user_need := st.chat_input("Ej: Busco un experto en marketing para lanzar un software..."):
+        # Mostramos y guardamos el mensaje del usuario
+        st.session_state.messages.append({"role": "user", "content": user_need})
+        with st.chat_message("user"):
+            st.markdown(user_need)
+            
+        # Mostramos el indicador de carga mientras consultamos a Gemini
+        with st.chat_message("assistant"):
+            with st.spinner("Buscando en la base de datos de talento..."):
+                matches_result = get_networking_matches(user_need, knowledge_context, api_key)
+            st.markdown(matches_result)
+        st.session_state.messages.append({"role": "assistant", "content": matches_result})
+
+if __name__ == "__main__":
+    main()

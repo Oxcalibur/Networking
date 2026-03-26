@@ -126,6 +126,28 @@ def get_networking_matches(user_need: str, db_context: str, api_key: str) -> str
 # 4. LÓGICA DE INTERFAZ DE USUARIO (UI)
 # ==========================================
 def main() -> None:
+    def display_matches(matches_result):
+        """Muestra los resultados, limitando a 5 si hay más, y ofrece la opción de ver más."""
+        matches_list = matches_result.split("\n")  # Asume que cada match está en una línea
+        num_matches = len(matches_list)
+
+        if num_matches == 0 or (num_matches == 1 and matches_list[0].strip() == ''):
+            st.info("No se encontraron coincidencias que cumplan con los criterios de búsqueda.")
+            return
+
+        if num_matches > 5:
+            for i in range(5):
+                st.markdown(matches_list[i])
+            if st.button("Ver más resultados"):
+                for i in range(5, num_matches):
+                    st.markdown(matches_list[i])
+        else:
+            for match in matches_list:
+                if match.strip() != '':  # Evita mostrar líneas vacías
+                    st.markdown(match)
+
+
+
     """Función principal que renderiza la interfaz en Streamlit y maneja los eventos."""
     
     st.set_page_config(page_title="AI Business Matchmaker", page_icon="🤝", layout="centered")
@@ -179,7 +201,7 @@ def main() -> None:
         with st.chat_message("assistant"):
             with st.spinner("Buscando en la base de datos de talento..."):
                 matches_result = get_networking_matches(user_need, knowledge_context, api_key)
-            st.markdown(matches_result)
+            display_matches(matches_result)
         st.session_state.messages.append({"role": "assistant", "content": matches_result})
 
 if __name__ == "__main__":
